@@ -8,7 +8,7 @@ samples.json
 oof/
 runs/
 final_model/
-web/model/
+docs/model/
 *.npy
 *.onnx
 

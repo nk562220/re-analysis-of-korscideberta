@@ -9,7 +9,7 @@
 
 사용법:
     pip install "optimum[onnxruntime]" onnx
-    python export_web.py --model final_model --out web/model
+    python export_web.py --model final_model --out docs/model
 """
 import argparse
 import json
@@ -20,7 +20,7 @@ import shutil
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="final_model")
-    ap.add_argument("--out", default="web/model")
+    ap.add_argument("--out", default="docs/model")
     ap.add_argument("--no-quantize", action="store_true", help="양자화 생략(fp32, 용량 4배)")
     ap.add_argument("--probe", default="이산화티타늄 광촉매를 코팅한 섬유의 미세플라스틱 제거 효율을 측정하였다.")
     args = ap.parse_args()
@@ -129,7 +129,7 @@ def main():
     huggingface-cli login
     huggingface-cli upload <내아이디>/korpaper-cls ./%s . --repo-type=model
 
-그다음 web/index.html 의 DEFAULT_MODEL 을 '<내아이디>/korpaper-cls' 로 바꾼다.
+그다음 docs/index.html 의 DEFAULT_MODEL 을 '<내아이디>/korpaper-cls' 로 바꾼다.
 """ % args.out)
 
 

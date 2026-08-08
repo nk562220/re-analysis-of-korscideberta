@@ -90,7 +90,7 @@ def main():
     print("저장 완료: %s" % os.path.abspath(args.out))
     if not used_mecab and "korscideberta" in args.model:
         print("주의: 대체 토크나이저로 학습됨. 배포 시에도 동일 조건이어야 한다.")
-    print("\n다음: python export_web.py --model %s --out web/model" % args.out)
+    print("\n다음: python export_web.py --model %s --out docs/model" % args.out)
 
 
 if __name__ == "__main__":

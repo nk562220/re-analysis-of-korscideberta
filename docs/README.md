@@ -30,7 +30,7 @@ Mecab-ko 형태소 분석기(C++ 바이너리 + 사전)를 요구하는데 이�
 
 ```python
 !pip -q install "optimum[onnxruntime]" onnx
-!python export_web.py --model final_model --out web/model
+!python export_web.py --model final_model --out docs/model
 ```
 
 PyTorch와 ONNX의 출력 확률을 비교해서 찍어준다. **최대 차이가 0.08 미만이면 정상**이다.
@@ -44,24 +44,19 @@ HF Hub는 용량 제한이 넉넉하고 CORS도 열려 있어 브라우저가 �
 ```python
 !pip -q install huggingface_hub
 !huggingface-cli login          # HF 토큰 입력 (Settings → Access Tokens에서 write 권한으로 발급)
-!huggingface-cli upload <내아이디>/korpaper-cls ./web/model . --repo-type=model
+!huggingface-cli upload <내아이디>/korpaper-cls ./docs/model . --repo-type=model
 ```
 
 ## 4. GitHub Pages 배포
 
-`web/` 폴더의 `index.html`만 올리면 된다(`web/model/`은 올리지 않는다).
+이 폴더는 이미 저장소에 포함되어 있다. 모델 파일(`docs/model/`)은 `.gitignore`로
+제외되어 있으므로 올라가는 것은 `index.html`과 이 README뿐이다.
 
-```bash
-git init
-git add index.html README.md
-git commit -m "청소년 논문 분야 분류기 웹 UI"
-git branch -M main
-git remote add origin https://github.com/<내아이디>/korpaper-classifier.git
-git push -u origin main
-```
+GitHub Pages는 브랜치 배포 시 `/ (root)`와 `/docs` 두 곳만 선택할 수 있다.
+그래서 이 폴더 이름이 `web`이 아니라 `docs`다.
 
-저장소 **Settings → Pages → Source: Deploy from a branch → main / (root) → Save**.
-1~2분 뒤 `https://<내아이디>.github.io/korpaper-classifier/` 에서 열린다.
+저장소 **Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / `/docs` → Save**.
+1~2분 뒤 https://nk562220.github.io/re-analysis-of-korscideberta/ 에서 열린다.
 
 `index.html`의 `DEFAULT_MODEL`을 자기 HF 모델 ID로 바꿔 두면 방문자가 설정 없이 바로 쓸 수 있다.
 
@@ -80,7 +75,7 @@ python -m http.server 8000
 ```
 
 `http://localhost:8000` 접속 → 모델 설정에 `model` 입력 → 다시 불러오기.
-(`web/model/` 폴더가 있어야 한다.)
+(`docs/model/` 폴더가 있어야 한다.)
 
 ## 문제 해결
 
