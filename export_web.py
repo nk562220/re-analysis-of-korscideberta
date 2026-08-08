@@ -57,24 +57,29 @@ def main():
     print("[3/4] transformers.js 배치로 정리")
     onnx_dir = os.path.join(args.out, "onnx")
     os.makedirs(onnx_dir, exist_ok=True)
-    weight = None
-    for f in sorted(os.listdir(src)):
+    # 양자화 산출물 이름은 optimum 버전마다 다르다(model_quantized.onnx / model_int8.onnx …).
+    # 여러 개가 나오면 양자화된 것을 우선 고른다.
+    cands = [f for f in sorted(os.listdir(src)) if f.endswith(".onnx")]
+    if not cands:
+        raise SystemExit("ONNX 파일을 찾지 못했습니다: %s" % src)
+    quant = [f for f in cands if "quant" in f.lower() or "int8" in f.lower()]
+    chosen = quant[0] if quant else cands[0]
+    is_quant = bool(quant) or src.endswith("_int8")
+
+    # transformers.js 의 dtype 규약: q8 -> model_quantized.onnx, fp32 -> model.onnx
+    weight = "model_quantized.onnx" if is_quant else "model.onnx"
+    shutil.copy(os.path.join(src, chosen), os.path.join(onnx_dir, weight))
+    for f in os.listdir(src):                       # 대용량 가중치 사이드카(.onnx_data)
+        if f.endswith(".onnx_data"):
+            shutil.copy(os.path.join(src, f), os.path.join(onnx_dir, f))
+    for f in os.listdir(src):                       # 설정/토크나이저는 루트로
         p = os.path.join(src, f)
-        if not os.path.isfile(p):
-            continue
-        if f.endswith(".onnx") or f.endswith(".onnx_data"):
-            # 양자화 산출물 이름은 버전마다 다르다(model_quantized.onnx / model_int8.onnx 등)
-            name = "model_quantized.onnx" if (not args.no_quantize and src.endswith("_int8")) else "model.onnx"
-            if f.endswith(".onnx"):
-                shutil.copy(p, os.path.join(onnx_dir, name))
-                weight = name
-            else:
-                shutil.copy(p, os.path.join(onnx_dir, f))
-        else:
+        if os.path.isfile(p) and not f.endswith((".onnx", ".onnx_data")):
             shutil.copy(p, os.path.join(args.out, f))
 
     for d in (tmp, os.path.join(args.out, "_int8")):
         shutil.rmtree(d, ignore_errors=True)
+    print("    가중치: onnx/%s  (원본 이름: %s)" % (weight, chosen))
 
     print("[4/4] 검증: 같은 문장을 PyTorch/ONNX 로 각각 추론")
     import numpy as np
@@ -89,10 +94,18 @@ def main():
     torch_model = AutoModelForSequenceClassification.from_pretrained(args.model).eval()
     with torch.no_grad():
         p_torch = torch.softmax(torch_model(**enc).logits, -1)[0].numpy()
-    onnx_reload = ORTModelForSequenceClassification.from_pretrained(
-        args.out, file_name=os.path.join("onnx", weight)
-    )
-    p_onnx = torch.softmax(torch.tensor(onnx_reload(**enc).logits), -1)[0].numpy()
+
+    # optimum 의 from_pretrained 는 버전에 따라 하위 폴더 경로를 못 받는다.
+    # onnxruntime 으로 직접 세션을 열면 버전에 흔들리지 않는다.
+    import onnxruntime as ort
+
+    sess = ort.InferenceSession(os.path.join(onnx_dir, weight), providers=["CPUExecutionProvider"])
+    want = {i.name for i in sess.get_inputs()}
+    feed = {k: v.numpy() for k, v in enc.items() if k in want}
+    for name in want - set(feed):          # 모델이 요구하지만 토크나이저가 안 준 입력(예: token_type_ids)
+        feed[name] = np.zeros_like(enc["input_ids"].numpy())
+    logits = sess.run(None, feed)[0]
+    p_onnx = torch.softmax(torch.tensor(logits), -1)[0].numpy()
 
     print("    %-12s %-10s %-10s" % ("분야", "PyTorch", "ONNX"))
     for i in np.argsort(-p_torch):
@@ -100,18 +113,23 @@ def main():
     gap = float(np.abs(p_torch - p_onnx).max())
     print("    최대 확률 차이: %.4f %s" % (gap, "(정상)" if gap < 0.08 else "(※ 크다 — --no-quantize 로 재시도)"))
 
-    size = sum(os.path.getsize(os.path.join(r, f))
-               for r, _, fs in os.walk(args.out) for f in fs) / 1e6
-    print("\n완료: %s  (총 %.0f MB)" % (os.path.abspath(args.out), size))
-    print("""
-다음 단계 — 모델 파일은 GitHub(100MB 제한)이 아니라 Hugging Face Hub에 둔다:
+    print("\n[파일 목록]")
+    total = 0
+    for r, _, fs in os.walk(args.out):
+        for f in sorted(fs):
+            p = os.path.join(r, f)
+            total += os.path.getsize(p)
+            print("    %-42s %8.1f MB" % (os.path.relpath(p, args.out), os.path.getsize(p) / 1e6))
+    print("    %-42s %8.1f MB" % ("합계", total / 1e6))
+    print("    웹에서 쓸 dtype: %s" % ("q8" if weight.endswith("_quantized.onnx") else "fp32"))
 
-    pip install huggingface_hub
+    print("""
+다음 단계 — 모델 파일은 GitHub(파일당 100MB 제한)이 아니라 Hugging Face Hub에 둔다:
+
     huggingface-cli login
     huggingface-cli upload <내아이디>/korpaper-cls ./%s . --repo-type=model
 
-그다음 web/index.html 을 열어 상단 입력란에 '<내아이디>/korpaper-cls' 를 넣으면 끝이다.
-web/ 폴더만 GitHub 저장소에 올려 Pages 로 배포한다.
+그다음 web/index.html 의 DEFAULT_MODEL 을 '<내아이디>/korpaper-cls' 로 바꾼다.
 """ % args.out)
 
 

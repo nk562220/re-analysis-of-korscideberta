@@ -151,22 +151,28 @@ async function loadModel(){
   if (isLocal) env.localModelPath = './';
 
   setStatus(`모델 불러오는 중: ${id}`, 2);
-  try {
-    classifier = await pipeline('text-classification', id, {
-      dtype: 'q8',
-      progress_callback: p => {
-        if (p.status === 'progress' && p.total)
-          setStatus(`내려받는 중 ${p.file || ''} — ${(p.loaded/1e6).toFixed(0)}/${(p.total/1e6).toFixed(0)}MB`,
-                    100 * p.loaded / p.total);
-        else if (p.status === 'ready') setStatus('준비 완료', 100);
-      },
-    });
-    setStatus('준비 완료. 초록을 입력하고 분류를 눌러보세요.', 100);
-    els.run.disabled = false;
-  } catch (e) {
-    setStatus(`모델을 불러오지 못했습니다: ${e.message}`, 0);
-    console.error(e);
+  const onProgress = p => {
+    if (p.status === 'progress' && p.total)
+      setStatus(`내려받는 중 ${p.file || ''} — ${(p.loaded/1e6).toFixed(0)}/${(p.total/1e6).toFixed(0)}MB`,
+                100 * p.loaded / p.total);
+    else if (p.status === 'ready') setStatus('준비 완료', 100);
+  };
+
+  // 양자화 모델(model_quantized.onnx)이 없으면 fp32(model.onnx)로 자동 대체
+  let lastErr = null;
+  for (const dtype of ['q8', 'fp32']) {
+    try {
+      classifier = await pipeline('text-classification', id, { dtype, progress_callback: onProgress });
+      setStatus(`준비 완료 (${dtype}). 초록을 입력하고 분류를 눌러보세요.`, 100);
+      els.run.disabled = false;
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`dtype=${dtype} 실패:`, e);
+    }
   }
+  setStatus(`모델을 불러오지 못했습니다: ${lastErr && lastErr.message}`, 0);
+  console.error(lastErr);
 }
 
 async function classify(){
