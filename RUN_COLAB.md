@@ -5,6 +5,70 @@
 
 **먼저 런타임 → 런타임 유형 변경 → T4 GPU → 저장.**
 
+---
+
+## 한 방에 실행 (셀 하나)
+
+단계별로 보고 싶으면 아래 "셀 1~10" 절로 내려간다. 그냥 끝까지 돌리려면 이 블록 하나면 된다.
+이미 끝난 fold는 `oof/parts/`에서 자동으로 건너뛴다.
+
+```python
+# ══ 0. 설정 ═══════════════════════════════════════════════════════
+REPO  = 'https://github.com/nk562220/re-analysis-of-korscideberta.git'
+HF_ID = 'nk562220/korpaper-cls'     # 업로드할 Hugging Face 모델 저장소
+SEEDS = '42'                        # '42 43 44' 로 바꾸면 신뢰도↑ (시간 3배)
+
+# ══ 1. 드라이브 연결 + 코드 받기 ══════════════════════════════════
+from google.colab import drive
+drive.mount('/content/drive')
+
+import glob, os
+hits = glob.glob('/content/drive/MyDrive/**/data_clean.csv', recursive=True)
+assert hits, 'data_clean.csv 를 드라이브에서 찾지 못했습니다. 업로드 위치를 확인하세요.'
+DATA, PROJ = hits[0], os.path.dirname(hits[0])
+OOF = PROJ + '/oof'
+print('DATA =', DATA)
+
+os.chdir('/content')
+!rm -rf work && git clone -q {REPO} work
+!cp "{DATA}" /content/work/
+os.chdir('/content/work')
+
+# ══ 2. 패키지 ═════════════════════════════════════════════════════
+# 의존성 충돌 경고(gradio 등)는 무시해도 된다.
+!pip -q install "transformers>=4.44" accelerate sentencepiece regex \
+                python-mecab-ko "optimum[onnxruntime]" onnx
+!nvidia-smi -L
+
+# ══ 3. Hugging Face 로그인 ════════════════════════════════════════
+# 지금 입력해 두면 이후 40분을 무인으로 돌릴 수 있다.
+# 토큰: huggingface.co/settings/tokens 에서 write 권한으로 발급
+from getpass import getpass
+from huggingface_hub import login
+login(token=getpass('HF write 토큰 붙여넣고 Enter: '))
+
+# ══ 4. 성능 측정 — 논문에 쓸 수치 ═════════════════════════════════
+!python baseline_tfidf.py --seeds 42 43 44 --outdir "{OOF}"
+!python finetune.py --model klue/roberta-base   --tag klue-roberta   --seeds {SEEDS} --outdir "{OOF}"
+!python mecab_compat.py
+!python finetune.py --model kisti/korscideberta --tag korscideberta --seeds {SEEDS} --outdir "{OOF}"
+!python report.py --outdir "{OOF}" --out "{PROJ}/results/report.md"
+
+# ══ 5. 배포용 최종 모델 + ONNX 변환 ═══════════════════════════════
+!python train_final.py --model klue/roberta-base --out final_model
+!cp -r final_model "{PROJ}/"
+!python export_web.py --model final_model --out docs/model
+
+# ══ 6. 모델 업로드 ════════════════════════════════════════════════
+!huggingface-cli upload {HF_ID} ./docs/model . --repo-type=model
+
+print('\n' + '='*60)
+print('완료. 모델: https://huggingface.co/' + HF_ID)
+print('성능 표: ' + PROJ + '/results/report.md')
+print("다음: docs/index.html 의 DEFAULT_MODEL 을 '" + HF_ID + "' 로 변경")
+print('='*60)
+```
+
 > ⚠️ 파이썬 버전을 절대 내리지 말 것.
 > KISTI 문서의 "Python 3.8~3.9 / torch 1.10" 제약은 원본 DeBERTa 학습 저장소용이며,
 > `transformers`로 모델을 쓰는 이 코드에는 해당되지 않는다.
