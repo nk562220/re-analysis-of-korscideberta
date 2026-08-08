@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>청소년 과학논문 분야 분류기</title>
+<style>
+  :root{
+    --bg:#f7f7f8; --card:#fff; --fg:#1a1a1c; --muted:#6b6b73; --line:#e3e3e8;
+    --accent:#3b5bdb; --accent-soft:#e7ecfd; --warn:#8a5a00; --warn-bg:#fff6e0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#16161a; --card:#1e1e24; --fg:#ececf0; --muted:#9a9aa5; --line:#2e2e37;
+      --accent:#7d95f5; --accent-soft:#23294a; --warn:#e8c07a; --warn-bg:#332a15;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    line-height:1.6;padding:24px 16px 64px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:.9rem;margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  label{display:block;font-size:.82rem;font-weight:600;color:var(--muted);margin-bottom:6px}
+  input[type=text],textarea{width:100%;background:var(--bg);color:var(--fg);
+    border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:inherit;font-size:.95rem}
+  textarea{min-height:150px;resize:vertical}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:10px 18px;
+    font:inherit;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line);font-weight:500;
+    padding:6px 12px;font-size:.85rem}
+  .status{font-size:.85rem;color:var(--muted);margin-top:10px;min-height:1.4em}
+  .bar-outer{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:8px}
+  .bar-inner{height:100%;background:var(--accent);width:0;transition:width .25s}
+  .top{display:flex;align-items:baseline;gap:10px;margin:2px 0 16px}
+  .top b{font-size:1.9rem;color:var(--accent)}
+  .top span{color:var(--muted);font-size:.9rem}
+  .res{display:grid;grid-template-columns:5.5rem 1fr 3.2rem;gap:8px;align-items:center;margin-bottom:7px;font-size:.9rem}
+  .res .track{height:20px;background:var(--bg);border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+  .res .fill{height:100%;background:var(--accent-soft);border-right:2px solid var(--accent);width:0;transition:width .3s}
+  .res .pct{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .res.first .pct{color:var(--fg);font-weight:700}
+  .note{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:.85rem;margin-bottom:16px}
+  details{font-size:.88rem}
+  summary{cursor:pointer;color:var(--muted);font-weight:600}
+  details .inner{margin-top:12px}
+  .hint{color:var(--muted);font-size:.8rem;margin-top:6px}
+  footer{color:var(--muted);font-size:.78rem;text-align:center;margin-top:28px;line-height:1.8}
+  code{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:.85em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>청소년 과학논문 분야 분류기</h1>
+  <p class="sub">전국과학전람회 수상논문 1,431편으로 파인튜닝한 한국어 언어모델이 초록을 읽고 연구 분야를 추정합니다.</p>
+
+  <div class="note">
+    교차검증 정확도는 <b>약 67%</b>입니다. 분야 경계가 모호한 논문이 많아(항균 소재 = 화학/생물 등)
+    100%는 원리적으로 불가능합니다. 참고용으로만 쓰세요.
+  </div>
+
+  <div class="card">
+    <label for="title">논문 제목</label>
+    <input type="text" id="title" placeholder="예: 광촉매 섬유를 이용한 미세플라스틱 제거 연구">
+    <div style="height:14px"></div>
+    <label for="abs">초록 / 서론</label>
+    <textarea id="abs" placeholder="논문의 초록이나 서론을 붙여넣으세요."></textarea>
+    <div class="row">
+      <button id="run" disabled>분야 분류</button>
+      <button class="ghost" id="clear">지우기</button>
+      <span style="flex:1"></span>
+      <span style="font-size:.8rem;color:var(--muted)">예시:</span>
+      <span id="samples"></span>
+    </div>
+    <div class="status" id="status">모델을 불러오는 중…</div>
+    <div class="bar-outer"><div class="bar-inner" id="prog"></div></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <div class="top"><b id="topLabel">—</b><span id="topInfo"></span></div>
+    <div id="bars"></div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>모델 설정</summary>
+      <div class="inner">
+        <label for="mid">Hugging Face 모델 ID 또는 로컬 폴더</label>
+        <input type="text" id="mid" placeholder="예: myname/korpaper-cls">
+        <p class="hint">
+          같은 폴더에 <code>./model/</code>을 두었다면 <code>model</code>이라고만 적으세요.
+          바꾼 뒤 <b>모델 다시 불러오기</b>를 누르면 적용됩니다. 설정은 이 브라우저에 저장됩니다.
+        </p>
+        <div class="row"><button class="ghost" id="reload">모델 다시 불러오기</button></div>
+      </div>
+    </details>
+  </div>
+
+  <footer>
+    추론은 전부 이 브라우저 안에서 실행됩니다. 입력한 논문 내용은 서버로 전송되지 않습니다.<br>
+    최초 실행 시 모델 파일(약 110MB)을 내려받고 이후에는 캐시를 사용합니다.<br>
+    기반 모델: KLUE-RoBERTa · 데이터: 전국과학전람회 수상논문(2020–2024)
+  </footer>
+</div>
+
+<script type="module">
+// 버전을 고정한다. 4.x 는 API가 달라 그대로 쓰면 동작하지 않을 수 있다.
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+
+const DEFAULT_MODEL = 'model';   // 배포 시 자신의 HF 모델 ID로 바꾸면 기본값이 된다
+const SAMPLES = [
+  { f:'물리', t:'물리 현상을 이용하는 다양한 센서에 대한 연구',
+    a:'기존의 센서와 다른 방식으로 측정하는 원심력을 활용한 각속도 센서와 자기장을 활용한 힘 센서를 제작하고, 센서의 성능, 장단점 및 활용방안을 분석하는 실험을 진행했다. 각각 1차 제작의 경험을 바탕으로 개선된 2차 센서를 제작했으며, 제작 과정과 실험 과정에서 설계한 센서의 개선방안을 발견했다.' },
+  { f:'화학', t:'HPLC를 이용한 타닌의 알칼로이드 저감 효과 연구',
+    a:'카페인과 니코틴 모두 알칼로이드 화합물이며 타닌과 강하게 반응하여 침전한다는 것을 알게 되었다. 따라서 타닌의 특성을 이용하면 카페인 과다 섭취, 간접흡연 등의 문제를 해결하는 데 도움이 될 것으로 보아 타닌의 알칼로이드 저감 효과 연구를 진행하였다.' },
+  { f:'생물', t:'사마귀 알집의 완충, 단열, 방염 효과를 활용한 샌드위치 판넬 대체 가능성 연구',
+    a:'외부 환경변화에 따른 사마귀 알집의 완충, 단열, 방염 효과를 확인하여 건축, 소재, 가구 등 다양한 분야의 친환경 소재로서의 활용 가능성을 검증하여 환경보호 및 탄소 중립을 실천하고자 함.' },
+  { f:'지구및환경', t:'새로운 동방파제로 태풍 풍랑 피해로부터 해변을 보호하라',
+    a:'태풍 내습 시 해안선 피해를 최소화할 수 있는 방안에 대한 연구를 수행함. 조위 관측소의 풍향, 풍속 데이터와 수치조류도의 유향을 조사 및 분석하여 해변에 내습하는 태풍과 풍랑의 관계를 탐구함. 또한 3D 프린팅을 활용하여 방파제 실험동을 만들고 수압 센서, 염료 확산을 통해 태풍, 풍랑과 방파제의 관계를 탐구함.' },
+  { f:'산업및에너지', t:'전략 기반 군중유동역학 모델 제시 및 현상 분석 적용',
+    a:'군중 사고를 연구하는 군중유동역학 분야를 위해 현실 군중의 움직임을 재현하고 최적화하는 새로운 시뮬레이션 프레임워크를 개발했다. 전략 기반 시뮬레이션, 현실 군중 데이터 변환, 데이터 비교 및 최적화의 세 단계를 포함하는 프레임워크를 구성하고 시나리오를 통해 테스트했다.' },
+];
+
+const $ = id => document.getElementById(id);
+const els = { title:$('title'), abs:$('abs'), run:$('run'), status:$('status'), prog:$('prog'),
+              bars:$('bars'), card:$('resultCard'), topLabel:$('topLabel'), topInfo:$('topInfo'),
+              mid:$('mid'), reload:$('reload'), clear:$('clear'), samples:$('samples') };
+
+let classifier = null;
+
+function modelId(){
+  return (localStorage.getItem('modelId') || DEFAULT_MODEL).trim();
+}
+
+function setStatus(msg, pct){
+  els.status.textContent = msg;
+  if (pct !== undefined) els.prog.style.width = Math.max(0, Math.min(100, pct)) + '%';
+}
+
+async function loadModel(){
+  const id = modelId();
+  els.mid.value = id;
+  els.run.disabled = true;
+  classifier = null;
+  const isLocal = !id.includes('/');
+  env.allowLocalModels = isLocal;
+  if (isLocal) env.localModelPath = './';
+
+  setStatus(`모델 불러오는 중: ${id}`, 2);
+  try {
+    classifier = await pipeline('text-classification', id, {
+      dtype: 'q8',
+      progress_callback: p => {
+        if (p.status === 'progress' && p.total)
+          setStatus(`내려받는 중 ${p.file || ''} — ${(p.loaded/1e6).toFixed(0)}/${(p.total/1e6).toFixed(0)}MB`,
+                    100 * p.loaded / p.total);
+        else if (p.status === 'ready') setStatus('준비 완료', 100);
+      },
+    });
+    setStatus('준비 완료. 초록을 입력하고 분류를 눌러보세요.', 100);
+    els.run.disabled = false;
+  } catch (e) {
+    setStatus(`모델을 불러오지 못했습니다: ${e.message}`, 0);
+    console.error(e);
+  }
+}
+
+async function classify(){
+  if (!classifier) return;
+  const title = els.title.value.trim();
+  const abs = els.abs.value.trim();
+  if (!abs && !title){ setStatus('초록을 입력해 주세요.'); return; }
+
+  // 학습 때와 동일한 입력 형식이어야 한다: "제목 [SEP] 초록"
+  const text = title ? `${title} [SEP] ${abs}` : abs;
+
+  els.run.disabled = true;
+  setStatus('분류 중…');
+  const t0 = performance.now();
+  try {
+    let out = await classifier(text, { top_k: 5 });
+    if (!Array.isArray(out)) out = [out];
+    out.sort((a, b) => b.score - a.score);
+    render(out, performance.now() - t0);
+    setStatus('완료');
+  } catch (e) {
+    setStatus(`추론 실패: ${e.message}`);
+    console.error(e);
+  }
+  els.run.disabled = false;
+}
+
+function render(out, ms){
+  els.card.style.display = 'block';
+  els.topLabel.textContent = out[0].label;
+  const margin = out.length > 1 ? out[0].score - out[1].score : 1;
+  const conf = margin < 0.15 ? ' · 1·2위 차이가 작아 판정이 불확실합니다' : '';
+  els.topInfo.textContent = `${(out[0].score*100).toFixed(1)}% · ${ms.toFixed(0)}ms${conf}`;
+  els.bars.innerHTML = '';
+  out.forEach((o, i) => {
+    const row = document.createElement('div');
+    row.className = 'res' + (i === 0 ? ' first' : '');
+    row.innerHTML = `<div>${o.label}</div>
+      <div class="track"><div class="fill"></div></div>
+      <div class="pct">${(o.score*100).toFixed(1)}%</div>`;
+    els.bars.appendChild(row);
+    requestAnimationFrame(() => {
+      row.querySelector('.fill').style.width = (o.score*100).toFixed(1) + '%';
+    });
+  });
+}
+
+SAMPLES.forEach(s => {
+  const b = document.createElement('button');
+  b.className = 'ghost';
+  b.textContent = s.f;
+  b.title = s.t;
+  b.onclick = () => { els.title.value = s.t; els.abs.value = s.a; classify(); };
+  els.samples.appendChild(b);
+});
+
+els.run.onclick = classify;
+els.clear.onclick = () => {
+  els.title.value = ''; els.abs.value = '';
+  els.card.style.display = 'none'; setStatus('준비 완료');
+};
+els.reload.onclick = () => {
+  localStorage.setItem('modelId', els.mid.value.trim() || DEFAULT_MODEL);
+  loadModel();
+};
+els.abs.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') classify();
+});
+
+loadModel();
+</script>
+</body>
+</html>

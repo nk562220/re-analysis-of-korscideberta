@@ -1,0 +1,21 @@
+# Python 3.10 이상 64bit 필요 (이 노트북 기본 파이썬은 3.7-32bit라 torch 설치 불가)
+#
+# GPU 있는 환경:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+# CPU만 있는 환경:
+#   pip install torch
+#
+transformers>=4.44
+tokenizers>=0.19
+sentencepiece>=0.2.0
+huggingface_hub>=0.24
+accelerate>=0.33
+scikit-learn>=1.3
+pandas>=2.0
+numpy>=1.24
+rapidfuzz>=3.0
+
+# KorSciDeBERTa 원본 토크나이저(Mecab-ko 기반)를 쓰려면 추가로 필요.
+# 리눅스/Colab: pip install konlpy && bash <mecab-ko 설치 스크립트>
+# 윈도우에서는 설치가 까다로워, finetune.py 가 자동으로 spm.model 기반 대체 경로로 넘어간다.
+# konlpy>=0.6.0

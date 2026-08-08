@@ -1,0 +1,19 @@
+# 데이터셋: 학생이 작성한 논문 초록 전문이므로 공개 저장소에 포함하지 않는다.
+# prepare_data.py 로 원본 크롤링 CSV에서 재생성할 수 있다.
+data_clean.csv
+data_clean_rne.csv
+samples.json
+
+# 학습 산출물 (용량이 크고 재생성 가능)
+oof/
+runs/
+final_model/
+web/model/
+*.npy
+*.onnx
+
+# 파이썬
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
