@@ -7,10 +7,30 @@
 
 ---
 
-## 한 방에 실행 (셀 하나)
+## 한 방에 실행 (셀 두 개)
 
-단계별로 보고 싶으면 아래 "셀 1~10" 절로 내려간다. 그냥 끝까지 돌리려면 이 블록 하나면 된다.
+단계별로 보고 싶으면 아래 "셀 1~10" 절로 내려간다. 그냥 끝까지 돌리려면 이 두 블록이면 된다.
 이미 끝난 fold는 `oof/parts/`에서 자동으로 건너뛴다.
+
+### 셀 A — 패키지 설치 후 런타임 재시작
+
+`optimum` 설치는 Colab에 미리 깔린 `huggingface_hub`을 다른 버전으로 교체한다.
+같은 세션에서 계속 쓰면 새 파일과 옛 파일이 섞여
+`ImportError: cannot import name 'XetAuthorizationError'` 같은 오류가 난다.
+**설치 후 반드시 재시작해야 한다.** 마지막 줄이 그 재시작을 강제한다.
+
+```python
+!pip -q install "transformers>=4.44" accelerate sentencepiece regex \
+                python-mecab-ko "optimum[onnxruntime]" onnx
+# 섞인 파일을 정리하기 위해 huggingface_hub 만 깨끗하게 다시 설치
+!pip -q install --force-reinstall --no-deps "huggingface_hub==0.36.2"
+
+print('설치 완료. 런타임을 재시작합니다 — 잠시 뒤 셀 B를 실행하세요.')
+import os
+os.kill(os.getpid(), 9)     # "런타임이 다시 시작되었습니다" 메시지는 정상이다
+```
+
+### 셀 B — 전체 파이프라인
 
 ```python
 # ══ 0. 설정 ═══════════════════════════════════════════════════════
@@ -33,33 +53,28 @@ os.chdir('/content')
 !rm -rf work && git clone -q {REPO} work
 !cp "{DATA}" /content/work/
 os.chdir('/content/work')
-
-# ══ 2. 패키지 ═════════════════════════════════════════════════════
-# 의존성 충돌 경고(gradio 등)는 무시해도 된다.
-!pip -q install "transformers>=4.44" accelerate sentencepiece regex \
-                python-mecab-ko "optimum[onnxruntime]" onnx
 !nvidia-smi -L
 
-# ══ 3. Hugging Face 로그인 ════════════════════════════════════════
-# 지금 입력해 두면 이후 40분을 무인으로 돌릴 수 있다.
+# ══ 2. Hugging Face 로그인 ════════════════════════════════════════
+# 지금 입력해 두면 이후를 무인으로 돌릴 수 있다.
 # 토큰: huggingface.co/settings/tokens 에서 write 권한으로 발급
 from getpass import getpass
 from huggingface_hub import login
 login(token=getpass('HF write 토큰 붙여넣고 Enter: '))
 
-# ══ 4. 성능 측정 — 논문에 쓸 수치 ═════════════════════════════════
+# ══ 3. 성능 측정 — 논문에 쓸 수치 ═════════════════════════════════
 !python baseline_tfidf.py --seeds 42 43 44 --outdir "{OOF}"
 !python finetune.py --model klue/roberta-base   --tag klue-roberta   --seeds {SEEDS} --outdir "{OOF}"
 !python mecab_compat.py
 !python finetune.py --model kisti/korscideberta --tag korscideberta --seeds {SEEDS} --outdir "{OOF}"
 !python report.py --outdir "{OOF}" --out "{PROJ}/results/report.md"
 
-# ══ 5. 배포용 최종 모델 + ONNX 변환 ═══════════════════════════════
+# ══ 4. 배포용 최종 모델 + ONNX 변환 ═══════════════════════════════
 !python train_final.py --model klue/roberta-base --out final_model
 !cp -r final_model "{PROJ}/"
 !python export_web.py --model final_model --out docs/model
 
-# ══ 6. 모델 업로드 ════════════════════════════════════════════════
+# ══ 5. 모델 업로드 ════════════════════════════════════════════════
 !huggingface-cli upload {HF_ID} ./docs/model . --repo-type=model
 
 print('\n' + '='*60)
@@ -225,6 +240,7 @@ const DEFAULT_MODEL = 'nk562220/korpaper-cls';
 | 증상 | 원인과 대처 |
 |---|---|
 | `can't open file '...py'` | 셀 1을 다시 실행(코드가 갱신됨) |
+| `ImportError: cannot import name 'XetAuthorizationError'` | pip 설치 후 런타임을 재시작하지 않은 것. 셀 A를 실행해 재시작한 뒤 셀 B를 돌린다 |
 | `CUDA out of memory` | 명령 끝에 `--bs 8 --grad-accum 2` |
 | 너무 느림 | `--max-len 256` (문서 95%가 448자 이내) |
 | 세션이 끊김 | 셀 1·2 후 끊긴 셀만 재실행. 끝난 fold는 `oof/parts/`에서 자동 스킵 |
