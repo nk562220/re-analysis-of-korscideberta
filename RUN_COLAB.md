@@ -12,23 +12,29 @@
 단계별로 보고 싶으면 아래 "셀 1~10" 절로 내려간다. 그냥 끝까지 돌리려면 이 두 블록이면 된다.
 이미 끝난 fold는 `oof/parts/`에서 자동으로 건너뛴다.
 
-### 셀 A — 패키지 설치 후 런타임 재시작
+### 셀 A — 패키지 설치
 
-`optimum` 설치는 Colab에 미리 깔린 `huggingface_hub`을 다른 버전으로 교체한다.
-같은 세션에서 계속 쓰면 새 파일과 옛 파일이 섞여
-`ImportError: cannot import name 'XetAuthorizationError'` 같은 오류가 난다.
-**설치 후 반드시 재시작해야 한다.** 마지막 줄이 그 재시작을 강제한다.
+`optimum` 설치는 Colab에 미리 깔린 `huggingface_hub`을 다른 버전으로 교체하면서
+파일이 섞이고 `ImportError: cannot import name 'XetAuthorizationError'` 를 일으킨다.
+`--force-reinstall` 로 그 패키지만 깨끗하게 덮어써서 해결한다.
+
+`os.kill` 로 커널을 강제 종료하는 방식은 쓰지 않는다. Colab이 이를 세션 충돌로 처리해
+VM을 새로 잡아버리면 방금 설치한 패키지까지 사라져 무한 반복이 된다.
+셀 B의 학습·변환은 모두 `!python 스크립트` 즉 **별도 프로세스**에서 실행되므로
+세션 안에서 `huggingface_hub` 을 임포트하지 않는 한 재시작은 필요 없다.
 
 ```python
 !pip -q install "transformers>=4.44" accelerate sentencepiece regex \
                 python-mecab-ko "optimum[onnxruntime]" onnx
-# 섞인 파일을 정리하기 위해 huggingface_hub 만 깨끗하게 다시 설치
 !pip -q install --force-reinstall --no-deps "huggingface_hub==0.36.2"
 
-print('설치 완료. 런타임을 재시작합니다 — 잠시 뒤 셀 B를 실행하세요.')
-import os
-os.kill(os.getpid(), 9)     # "런타임이 다시 시작되었습니다" 메시지는 정상이다
+# 새 인터프리터에서 임포트해 설치가 온전한지 확인한다(세션은 건드리지 않는다)
+!python -c "import huggingface_hub, transformers, optimum, onnxruntime as o; \
+print('설치 정상:', huggingface_hub.__version__, transformers.__version__, o.__version__)"
 ```
+
+마지막 줄에 `설치 정상: ...` 이 찍히면 셀 B로 넘어간다.
+`ImportError` 가 찍히면 그때만 메뉴에서 **런타임 → 세션 다시 시작** 후 셀 B를 실행한다.
 
 ### 셀 B — 전체 파이프라인
 
@@ -55,12 +61,13 @@ os.chdir('/content')
 os.chdir('/content/work')
 !nvidia-smi -L
 
-# ══ 2. Hugging Face 로그인 ════════════════════════════════════════
-# 지금 입력해 두면 이후를 무인으로 돌릴 수 있다.
+# ══ 2. Hugging Face 토큰 ══════════════════════════════════════════
+# huggingface_hub 을 세션에서 임포트하지 않고 환경변수로 넘긴다.
+# huggingface-cli 가 HF_TOKEN 을 자동으로 읽으므로 login() 이 필요 없고,
+# 버전 충돌과 런타임 재시작을 모두 피할 수 있다.
 # 토큰: huggingface.co/settings/tokens 에서 write 권한으로 발급
 from getpass import getpass
-from huggingface_hub import login
-login(token=getpass('HF write 토큰 붙여넣고 Enter: '))
+os.environ['HF_TOKEN'] = getpass('HF write 토큰 붙여넣고 Enter: ').strip()
 
 # ══ 3. 성능 측정 — 논문에 쓸 수치 ═════════════════════════════════
 !python baseline_tfidf.py --seeds 42 43 44 --outdir "{OOF}"
@@ -211,15 +218,19 @@ PyTorch와 ONNX의 확률이 나란히 출력된다. **최대 차이가 0.08 미
 GitHub은 파일당 100MB 제한이라 모델이 안 들어간다. HF Hub는 용량이 넉넉하고
 CORS가 열려 있어 브라우저가 바로 받아갈 수 있다.
 
-```python
-!huggingface-cli login
-```
-
-[huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)에서 **write 권한** 토큰을 발급해 붙여넣는다.
+[huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)에서 **write 권한** 토큰을 발급해
+아래에 붙여넣는다. 화면에 찍히지 않고 노트북에도 저장되지 않는다.
 
 ```python
+import os
+from getpass import getpass
+os.environ['HF_TOKEN'] = getpass('HF write 토큰 붙여넣고 Enter: ').strip()
+
 !huggingface-cli upload nk562220/korpaper-cls ./docs/model . --repo-type=model
 ```
+
+`huggingface-cli` 는 `HF_TOKEN` 환경변수를 자동으로 읽으므로 `login` 을 따로 하지 않는다.
+세션에서 `huggingface_hub` 을 임포트하지 않아 버전 충돌도 피할 수 있다.
 
 ## 셀 10 — 마무리
 
