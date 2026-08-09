@@ -44,7 +44,7 @@ HF Hub는 용량 제한이 넉넉하고 CORS도 열려 있어 브라우저가 �
 ```python
 !pip -q install huggingface_hub
 !huggingface-cli login          # HF 토큰 입력 (Settings → Access Tokens에서 write 권한으로 발급)
-!huggingface-cli upload <내아이디>/korpaper-cls ./docs/model . --repo-type=model
+!hf upload <내아이디>/korpaper-cls ./docs/model . --repo-type=model
 ```
 
 ## 4. GitHub Pages 배포

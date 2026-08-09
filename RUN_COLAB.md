@@ -41,7 +41,7 @@ print('설치 정상:', huggingface_hub.__version__, transformers.__version__, o
 ```python
 # ══ 0. 설정 ═══════════════════════════════════════════════════════
 REPO  = 'https://github.com/nk562220/re-analysis-of-korscideberta.git'
-HF_ID = 'nk562220/korpaper-cls'     # 업로드할 Hugging Face 모델 저장소
+HF_ID = 'nk56/korpaper-cls'     # 업로드할 Hugging Face 모델 저장소
 SEEDS = '42'                        # '42 43 44' 로 바꾸면 신뢰도↑ (시간 3배)
 
 # ══ 1. 드라이브 연결 + 코드 받기 ══════════════════════════════════
@@ -82,12 +82,14 @@ os.environ['HF_TOKEN'] = getpass('HF write 토큰 붙여넣고 Enter: ').strip()
 !python export_web.py --model final_model --out docs/model
 
 # ══ 5. 모델 업로드 ════════════════════════════════════════════════
-!huggingface-cli upload {HF_ID} ./docs/model . --repo-type=model
+# 종료 코드를 검사한다. !명령 은 실패해도 셀이 계속 진행되므로
+# 검사하지 않으면 업로드가 실패했는데 '완료'가 찍힌다.
+rc = os.system(f'hf upload {HF_ID} ./docs/model . --repo-type=model')
+assert rc == 0, '업로드 실패 — 위 오류 메시지를 확인하세요(토큰은 hf_ 로 시작하는 37자)'
 
 print('\n' + '='*60)
 print('완료. 모델: https://huggingface.co/' + HF_ID)
 print('성능 표: ' + PROJ + '/results/report.md')
-print("다음: docs/index.html 의 DEFAULT_MODEL 을 '" + HF_ID + "' 로 변경")
 print('='*60)
 ```
 
@@ -225,19 +227,25 @@ CORS가 열려 있어 브라우저가 바로 받아갈 수 있다.
 import os
 from getpass import getpass
 os.environ['HF_TOKEN'] = getpass('HF write 토큰 붙여넣고 Enter: ').strip()
+assert os.environ['HF_TOKEN'].startswith('hf_'), '토큰 형식이 아닙니다. 발급 팝업의 복사 버튼으로 다시 복사하세요.'
 
-!huggingface-cli upload nk562220/korpaper-cls ./docs/model . --repo-type=model
+rc = os.system('hf upload nk56/korpaper-cls ./docs/model . --repo-type=model')
+assert rc == 0, '업로드 실패 — 위 오류 확인'
 ```
 
-`huggingface-cli` 는 `HF_TOKEN` 환경변수를 자동으로 읽으므로 `login` 을 따로 하지 않는다.
+`hf` 는 `HF_TOKEN` 환경변수를 자동으로 읽으므로 `login` 을 따로 하지 않는다.
 세션에서 `huggingface_hub` 을 임포트하지 않아 버전 충돌도 피할 수 있다.
+
+토큰은 반드시 **발급 직후 팝업의 복사 버튼**으로 복사한다(`hf_` + 34자).
+목록 화면에는 이름만 보이므로 거기서 복사하면 토큰이 아닌 값이 잡혀 401이 난다.
+`huggingface-cli` 는 폐기 예고가 떴으므로 새 명령 `hf` 를 쓴다.
 
 ## 셀 10 — 마무리
 
-`docs/index.html`의 `DEFAULT_MODEL`을 방금 만든 모델 ID로 바꿔 커밋·push한다.
+`docs/index.html` 의 `DEFAULT_MODEL` 이 이미 아래 값으로 설정되어 있다(변경 완료).
 
 ```js
-const DEFAULT_MODEL = 'nk562220/korpaper-cls';
+const DEFAULT_MODEL = 'nk56/korpaper-cls';
 ```
 
 그리고 저장소 **Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / `/docs` → Save**.
